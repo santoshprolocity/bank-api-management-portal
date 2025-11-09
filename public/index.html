@@ -1,18 +1,428 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="Banking API Management Portal - Comprehensive dashboard for managing and monitoring banking APIs"
-    />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bank API Management Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
-  </body>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+    <div id="app"></div>
+
+    <script>
+        const state = {
+            searchQuery: '',
+            selectedCategory: 'All',
+            selectedAPI: null,
+            selectedEnvironment: 'Production',
+            showAlerts: false,
+            activeTab: 'overview'
+        };
+
+        const categories = [
+            { id: 'All', name: 'All APIs', icon: 'database', color: 'bg-gray-500' },
+            { id: 'KYC', name: 'KYC & Verification', icon: 'shield', color: 'bg-blue-500' },
+            { id: 'Customer', name: 'Customer Management', icon: 'users', color: 'bg-green-500' },
+            { id: 'Payments', name: 'Payments & Transactions', icon: 'credit-card', color: 'bg-purple-500' },
+            { id: 'Compliance', name: 'Compliance & Regulatory', icon: 'file-text', color: 'bg-red-500' },
+            { id: 'Analytics', name: 'Analytics & Reporting', icon: 'trending-up', color: 'bg-yellow-500' },
+            { id: 'ThirdParty', name: '3rd Party Integrations', icon: 'external-link', color: 'bg-orange-500' }
+        ];
+
+        const apis = [
+            {
+                id: 1,
+                name: 'KYC Validation API',
+                category: 'KYC',
+                provider: 'Internal',
+                version: 'v2.1',
+                endpoint: '/api/v2/kyc/validate',
+                method: 'POST',
+                description: 'Validates customer KYC documents including Aadhaar, PAN, and other identity proofs as per RBI guidelines',
+                usage: { today: 1247, month: 38921, limit: 100000 },
+                status: 'active',
+                responseTime: '245ms',
+                successRate: 99.7,
+                compliance: ['RBI', 'PMLA', 'Aadhaar Act'],
+                rateLimit: '1000/hour',
+                sla: '99.9%',
+                owner: 'Digital Banking Team',
+                securityLevel: 'High',
+                dataClassification: 'Confidential',
+                costPerCall: '₹0.50',
+                monthlyCost: '₹19,460',
+                authentication: 'OAuth 2.0 + API Key'
+            },
+            {
+                id: 2,
+                name: 'PAN Validation API',
+                category: 'KYC',
+                provider: 'NSDL (3rd Party)',
+                version: 'v1.5',
+                endpoint: '/api/v1/pan/verify',
+                method: 'POST',
+                description: 'Real-time PAN card validation against Income Tax Department database via NSDL',
+                usage: { today: 2156, month: 67234, limit: 150000 },
+                status: 'active',
+                responseTime: '312ms',
+                successRate: 98.9,
+                compliance: ['Income Tax Act', 'PMLA'],
+                rateLimit: '500/hour',
+                thirdParty: true,
+                sla: '99.5%',
+                owner: 'Compliance Team',
+                securityLevel: 'High',
+                dataClassification: 'Confidential',
+                costPerCall: '₹2.00',
+                monthlyCost: '₹1,34,468',
+                authentication: 'API Key'
+            },
+            {
+                id: 3,
+                name: 'UPI Payment API',
+                category: 'Payments',
+                provider: 'NPCI (3rd Party)',
+                version: 'v3.5',
+                endpoint: '/api/v3/payments/upi',
+                method: 'POST',
+                description: 'UPI payment processing for collect requests and money transfers',
+                usage: { today: 12456, month: 398734, limit: 1500000 },
+                status: 'active',
+                responseTime: '534ms',
+                successRate: 98.7,
+                compliance: ['NPCI UPI', 'RBI'],
+                rateLimit: '3000/hour',
+                thirdParty: true,
+                sla: '99.7%',
+                owner: 'Payments Team',
+                securityLevel: 'Critical',
+                dataClassification: 'Highly Confidential',
+                costPerCall: '₹0.30',
+                monthlyCost: '₹1,19,620',
+                authentication: 'OAuth 2.0 + UPI PIN'
+            }
+        ];
+
+        const alerts = [
+            { id: 1, type: 'warning', title: 'High Usage Alert', message: 'UPI Payment API has reached 85% of monthly quota', timestamp: '2 hours ago' },
+            { id: 2, type: 'error', title: 'SLA Breach', message: 'Response time exceeded SLA threshold', timestamp: '5 hours ago' }
+        ];
+
+        const environments = ['Production', 'Staging', 'Development', 'Sandbox'];
+
+        function createIcon(iconName, size, className) {
+            return '<i data-lucide="' + iconName + '" class="' + (className || '') + '" style="width: ' + size + 'px; height: ' + size + 'px;"></i>';
+        }
+
+        function getFilteredAPIs() {
+            return apis.filter(function(api) {
+                const matchesSearch = api.name.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+                                    api.description.toLowerCase().includes(state.searchQuery.toLowerCase());
+                const matchesCategory = state.selectedCategory === 'All' || api.category === state.selectedCategory;
+                return matchesSearch && matchesCategory;
+            });
+        }
+
+        function getStats() {
+            return {
+                totalAPIs: apis.length,
+                activeAPIs: apis.filter(function(a) { return a.status === 'active'; }).length,
+                thirdPartyAPIs: apis.filter(function(a) { return a.thirdParty; }).length,
+                avgResponseTime: 400,
+                totalCalls: 1200,
+                criticalAPIs: apis.filter(function(a) { return a.securityLevel === 'Critical'; }).length
+            };
+        }
+
+        function toggleAlerts() {
+            state.showAlerts = !state.showAlerts;
+            render();
+        }
+
+        function selectEnvironment(env) {
+            state.selectedEnvironment = env;
+            render();
+        }
+
+        function updateSearch(value) {
+            state.searchQuery = value;
+            render();
+        }
+
+        function selectCategory(categoryId) {
+            state.selectedCategory = categoryId;
+            render();
+        }
+
+        function selectAPI(apiId) {
+            state.selectedAPI = apiId;
+            state.activeTab = 'overview';
+            render();
+        }
+
+        function closeModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            state.selectedAPI = null;
+            render();
+        }
+
+        function selectTab(tab) {
+            state.activeTab = tab;
+            const api = apis.find(function(a) { return a.id === state.selectedAPI; });
+            if (api) {
+                document.getElementById('modal-content').innerHTML = renderModalContent(api);
+                lucide.createIcons();
+            }
+        }
+
+        function renderModalContent(api) {
+            if (state.activeTab === 'overview') {
+                return '<div class="space-y-6">' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Description</h3>' +
+                    '<p class="text-gray-600">' + api.description + '</p></div>' +
+                    '<div class="grid grid-cols-2 gap-4">' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Provider</h3><p class="text-gray-600">' + api.provider + '</p></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Owner</h3><p class="text-gray-600">' + api.owner + '</p></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Response Time</h3><p class="text-gray-600">' + api.responseTime + '</p></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Success Rate</h3><p class="text-green-600 font-bold">' + api.successRate + '%</p></div>' +
+                    '</div></div>';
+            } else if (state.activeTab === 'technical') {
+                return '<div class="space-y-6">' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Endpoint</h3>' +
+                    '<code class="block bg-gray-100 p-3 rounded text-sm">' + api.endpoint + '</code></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Method</h3>' +
+                    '<span class="px-3 py-1 bg-blue-100 text-blue-700 rounded font-medium">' + api.method + '</span></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Authentication</h3><p class="text-gray-600">' + api.authentication + '</p></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Rate Limit</h3><p class="text-gray-600">' + api.rateLimit + '</p></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">SLA</h3><p class="text-gray-600">' + api.sla + ' uptime guaranteed</p></div>' +
+                    '</div>';
+            } else if (state.activeTab === 'security') {
+                return '<div class="space-y-6">' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Security Level</h3>' +
+                    '<span class="px-4 py-2 bg-red-100 text-red-700 rounded-lg font-bold">' + api.securityLevel + '</span></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Data Classification</h3><p class="text-gray-600">' + api.dataClassification + '</p></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-2">Compliance</h3><div class="flex flex-wrap gap-2">' +
+                    api.compliance.map(function(c) { return '<span class="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm">' + c + '</span>'; }).join('') +
+                    '</div></div></div>';
+            } else if (state.activeTab === 'costing') {
+                return '<div class="space-y-6">' +
+                    '<div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6">' +
+                    '<h3 class="font-semibold text-gray-900 mb-4 flex items-center gap-2">' +
+                    createIcon('dollar-sign', 20, '') + ' Cost Breakdown</h3>' +
+                    '<div class="grid grid-cols-2 gap-6">' +
+                    '<div><p class="text-sm text-gray-600 mb-1">Cost Per API Call</p><p class="text-3xl font-bold text-blue-600">' + api.costPerCall + '</p></div>' +
+                    '<div><p class="text-sm text-gray-600 mb-1">Monthly Total Cost</p><p class="text-3xl font-bold text-purple-600">' + api.monthlyCost + '</p></div>' +
+                    '</div></div>' +
+                    '<div><h3 class="font-semibold text-gray-900 mb-3">Usage Statistics</h3><div class="space-y-3">' +
+                    '<div class="flex justify-between items-center"><span class="text-gray-600">Calls Today:</span><span class="font-bold text-gray-900">' + api.usage.today.toLocaleString() + '</span></div>' +
+                    '<div class="flex justify-between items-center"><span class="text-gray-600">Calls This Month:</span><span class="font-bold text-gray-900">' + api.usage.month.toLocaleString() + '</span></div>' +
+                    '<div class="flex justify-between items-center"><span class="text-gray-600">Monthly Limit:</span><span class="font-bold text-gray-900">' + api.usage.limit.toLocaleString() + '</span></div>' +
+                    '<div class="flex justify-between items-center pt-3 border-t"><span class="text-gray-600">Usage Percentage:</span><span class="font-bold text-blue-600">' + ((api.usage.month / api.usage.limit) * 100).toFixed(1) + '%</span></div>' +
+                    '</div></div>' +
+                    '<div class="bg-gray-50 rounded-lg p-4"><h3 class="font-semibold text-gray-900 mb-2">Cost Efficiency</h3>' +
+                    '<p class="text-sm text-gray-600">Based on current usage, this API processes approximately ' + (api.usage.month / 30).toFixed(0) + ' calls per day at an average cost of ' + api.costPerCall + ' per call.</p></div>' +
+                    '</div>';
+            }
+            return '';
+        }
+
+        function render() {
+            const stats = getStats();
+            const filteredAPIs = getFilteredAPIs();
+            
+            let html = '<header class="bg-white shadow-md border-b-4 border-blue-600">' +
+                '<div class="max-w-7xl mx-auto px-6 py-6">' +
+                '<div class="flex items-center justify-between">' +
+                '<div><div class="flex items-center gap-3">' +
+                '<h1 class="text-3xl font-bold text-gray-900">API Management Portal</h1>' +
+                '<a href="https://abhiojha.github.io/bank-api-management-portal" target="_blank" rel="noopener noreferrer" ' +
+                'class="text-sm px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium hover:bg-blue-200 transition-colors flex items-center gap-1">' +
+                createIcon('external-link', 14, '') + ' Live URL</a></div>' +
+                '<p class="text-gray-600 mt-1">Banking API Catalog & Usage Monitoring</p></div>' +
+                '<div class="flex gap-3">' +
+                '<button onclick="toggleAlerts()" class="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">' +
+                createIcon('bell', 24, 'text-gray-600') +
+                '<span class="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full"></span></button>' +
+                '<button class="p-2 hover:bg-gray-100 rounded-lg transition-colors">' + createIcon('settings', 24, 'text-gray-600') + '</button>' +
+                '<button class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">' +
+                createIcon('book-open', 20, '') + '<span>Documentation</span></button></div></div>' +
+                '<div class="mt-4 flex items-center gap-3"><span class="text-sm font-medium text-gray-600">Environment:</span><div class="flex gap-2">';
+            
+            environments.forEach(function(env) {
+                html += '<button onclick="selectEnvironment(\'' + env + '\')" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all ' +
+                    (state.selectedEnvironment === env ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200') +
+                    '">' + env + '</button>';
+            });
+            
+            html += '</div></div></div></header>';
+
+            if (state.showAlerts) {
+                html += '<div class="max-w-7xl mx-auto px-6 py-4"><div class="bg-white rounded-lg shadow-lg border border-gray-200 p-6">' +
+                    '<div class="flex items-center justify-between mb-4">' +
+                    '<h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">' + createIcon('bell', 20, '') + ' Alerts & Notifications</h3>' +
+                    '<button onclick="toggleAlerts()" class="text-gray-400 hover:text-gray-600">✕</button></div><div class="space-y-3">';
+                
+                alerts.forEach(function(alert) {
+                    html += '<div class="flex items-start gap-3 p-4 rounded-lg border-l-4 ' +
+                        (alert.type === 'error' ? 'bg-red-50 border-red-500' : 'bg-yellow-50 border-yellow-500') + '">' +
+                        (alert.type === 'error' ? createIcon('x-circle', 20, 'text-red-500 mt-0.5') : createIcon('alert-triangle', 20, 'text-yellow-500 mt-0.5')) +
+                        '<div class="flex-1"><h4 class="font-semibold text-gray-900">' + alert.title + '</h4>' +
+                        '<p class="text-sm text-gray-600 mt-1">' + alert.message + '</p>' +
+                        '<p class="text-xs text-gray-500 mt-2">' + alert.timestamp + '</p></div></div>';
+                });
+                
+                html += '</div></div></div>';
+            }
+
+            html += '<div class="max-w-7xl mx-auto px-6 py-8">' +
+                '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">' +
+                '<div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500 hover:shadow-xl transition-shadow">' +
+                '<div class="flex items-center justify-between"><div class="flex-1"><div class="flex items-center gap-3 mb-3">' +
+                createIcon('database', 32, 'text-blue-500') +
+                '<div><p class="text-gray-500 text-sm font-medium">Total APIs</p>' +
+                '<p class="text-4xl font-bold text-gray-900">' + stats.totalAPIs + '</p></div></div>' +
+                '<div class="flex gap-4 text-sm"><div class="flex items-center gap-1">' +
+                createIcon('check-circle', 16, 'text-green-500') +
+                '<span class="text-gray-600">' + stats.activeAPIs + ' Active</span></div>' +
+                '<div class="flex items-center gap-1">' + createIcon('lock', 16, 'text-red-500') +
+                '<span class="text-gray-600">' + stats.criticalAPIs + ' Critical</span></div></div></div></div></div>' +
+                
+                '<div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500 hover:shadow-xl transition-shadow">' +
+                '<div class="flex items-center justify-between"><div class="flex-1"><div class="flex items-center gap-3 mb-3">' +
+                createIcon('external-link', 32, 'text-orange-500') +
+                '<div><p class="text-gray-500 text-sm font-medium">3rd Party APIs</p>' +
+                '<p class="text-4xl font-bold text-gray-900">' + stats.thirdPartyAPIs + '</p></div></div>' +
+                '<div class="flex gap-4 text-sm"><div class="flex items-center gap-1">' +
+                createIcon('trending-up', 16, 'text-green-500') +
+                '<span class="text-gray-600">External Integrations</span></div></div></div></div></div>' +
+                
+                '<div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500 hover:shadow-xl transition-shadow">' +
+                '<div class="flex items-center justify-between"><div class="flex-1"><div class="flex items-center gap-3 mb-3">' +
+                createIcon('clock', 32, 'text-purple-500') +
+                '<div><p class="text-gray-500 text-sm font-medium">Avg Response Time</p>' +
+                '<p class="text-4xl font-bold text-gray-900">' + stats.avgResponseTime + '<span class="text-2xl">ms</span></p></div></div>' +
+                '<div class="flex gap-4 text-sm"><div class="flex items-center gap-1">' +
+                createIcon('check-circle', 16, 'text-green-500') +
+                '<span class="text-gray-600">Within SLA</span></div></div></div></div></div>' +
+                
+                '<div class="bg-white rounded-xl shadow-lg p-6 border-l-4 border-indigo-500 hover:shadow-xl transition-shadow">' +
+                '<div class="flex items-center justify-between"><div class="flex-1"><div class="flex items-center gap-3 mb-3">' +
+                createIcon('bar-chart-3', 32, 'text-indigo-500') +
+                '<div><p class="text-gray-500 text-sm font-medium">Total API Calls</p>' +
+                '<p class="text-4xl font-bold text-gray-900">' + stats.totalCalls + '<span class="text-2xl">K</span></p></div></div>' +
+                '<div class="flex gap-4 text-sm"><div class="flex items-center gap-1">' +
+                createIcon('trending-up', 16, 'text-green-500') +
+                '<span class="text-gray-600">This Month</span></div></div></div></div></div>' +
+                '</div>';
+
+            html += '<div class="bg-white rounded-lg shadow-md p-6 mb-8">' +
+                '<div class="flex flex-col md:flex-row gap-4 mb-4"><div class="flex-1 relative">' +
+                createIcon('search', 20, 'absolute left-3 top-3 text-gray-400') +
+                '<input type="text" placeholder="Search APIs..." value="' + state.searchQuery + '" ' +
+                'oninput="updateSearch(this.value)" ' +
+                'class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"></div>' +
+                '<button class="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">' +
+                createIcon('filter', 20, '') + ' Filters</button>' +
+                '<button class="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">' +
+                createIcon('download', 20, '') + ' Export</button></div><div class="flex flex-wrap gap-3">';
+
+            categories.forEach(function(cat) {
+                html += '<button onclick="selectCategory(\'' + cat.id + '\')" ' +
+                    'class="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ' +
+                    (state.selectedCategory === cat.id ? cat.color + ' text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200') + '">' +
+                    createIcon(cat.icon, 18, '') + '<span>' + cat.name + '</span></button>';
+            });
+
+            html += '</div></div>';
+
+            html += '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">';
+            
+            filteredAPIs.forEach(function(api) {
+                html += '<div onclick="selectAPI(' + api.id + ')" ' +
+                    'class="bg-white rounded-lg shadow-md hover:shadow-xl transition-all cursor-pointer border border-gray-200 hover:border-blue-400">' +
+                    '<div class="p-6"><div class="flex items-start justify-between mb-3"><div class="flex-1">' +
+                    '<div class="flex items-center gap-2 mb-2">' +
+                    (api.securityLevel === 'Critical' ? createIcon('lock', 16, 'text-red-500') : '') +
+                    '<h3 class="text-lg font-bold text-gray-900">' + api.name + '</h3></div>' +
+                    '<div class="flex items-center gap-2 flex-wrap">' +
+                    '<span class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">' + api.version + '</span>';
+                
+                if (api.thirdParty) {
+                    html += '<span class="text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded font-medium flex items-center gap-1">' +
+                        createIcon('external-link', 12, '') + ' 3rd Party</span>';
+                }
+                
+                const securityClass = api.securityLevel === 'Critical' ? 'bg-red-100 text-red-700' :
+                                     api.securityLevel === 'High' ? 'bg-orange-100 text-orange-700' :
+                                     'bg-yellow-100 text-yellow-700';
+                
+                html += '<span class="text-xs px-2 py-1 rounded font-medium ' + securityClass + '">' + api.securityLevel + '</span>' +
+                    '</div></div></div>' +
+                    '<p class="text-sm text-gray-600 mb-4 line-clamp-2">' + api.description + '</p>' +
+                    '<div class="space-y-2 mb-4">' +
+                    '<div class="flex items-center justify-between text-sm"><span class="text-gray-500">Provider:</span><span class="font-medium text-gray-900">' + api.provider + '</span></div>' +
+                    '<div class="flex items-center justify-between text-sm"><span class="text-gray-500">Response:</span><span class="font-medium text-gray-900">' + api.responseTime + '</span></div>' +
+                    '<div class="flex items-center justify-between text-sm"><span class="text-gray-500">Success Rate:</span><span class="font-medium text-green-600">' + api.successRate + '%</span></div>' +
+                    '<div class="flex items-center justify-between text-sm bg-blue-50 p-2 rounded">' +
+                    '<span class="text-gray-700 flex items-center gap-1 font-medium">' + createIcon('dollar-sign', 14, '') + ' Cost/Call:</span>' +
+                    '<span class="font-bold text-blue-600">' + api.costPerCall + '</span></div>' +
+                    '<div class="flex items-center justify-between text-sm bg-purple-50 p-2 rounded">' +
+                    '<span class="text-gray-700 font-medium">Monthly Cost:</span>' +
+                    '<span class="font-bold text-purple-600">' + api.monthlyCost + '</span></div></div>' +
+                    '<div class="border-t pt-4"><p class="text-xs text-gray-500 mb-2">Monthly Usage</p>' +
+                    '<div class="flex justify-between text-sm mb-2">' +
+                    '<span class="font-bold text-gray-900">' + api.usage.month.toLocaleString() + '</span>' +
+                    '<span class="text-gray-500">of ' + api.usage.limit.toLocaleString() + '</span></div>' +
+                    '<div class="h-2 bg-gray-200 rounded-full overflow-hidden">' +
+                    '<div class="h-full bg-blue-500" style="width: ' + ((api.usage.month / api.usage.limit) * 100) + '%"></div></div></div></div></div>';
+            });
+            
+            html += '</div></div>';
+
+            if (state.selectedAPI) {
+                const api = apis.find(function(a) { return a.id === state.selectedAPI; });
+                if (api) {
+                    html += '<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onclick="closeModal(event)">' +
+                        '<div class="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">' +
+                        '<div class="p-8"><div class="flex items-start justify-between mb-6"><div>' +
+                        '<h2 class="text-2xl font-bold text-gray-900 mb-2">' + api.name + '</h2>' +
+                        '<div class="flex items-center gap-2 flex-wrap">' +
+                        '<span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">' + api.version + '</span>';
+                    
+                    if (api.thirdParty) {
+                        html += '<span class="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-medium">3rd Party</span>';
+                    }
+                    
+                    html += '</div></div><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl">✕</button></div>' +
+                        '<div class="border-b mb-6"><div class="flex gap-4">';
+                    
+                    ['overview', 'technical', 'security', 'costing'].forEach(function(tab) {
+                        html += '<button onclick="selectTab(\'' + tab + '\')" ' +
+                            'class="pb-3 px-2 font-medium capitalize ' +
+                            (state.activeTab === tab ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500') + '">' +
+                            tab + '</button>';
+                    });
+                    
+                    html += '</div></div><div id="modal-content">' + renderModalContent(api) + '</div></div></div></div>';
+                }
+            }
+
+            document.getElementById('app').innerHTML = html;
+            lucide.createIcons();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            render();
+        });
+    </script>
+</body>
 </html>
